@@ -1,121 +1,159 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Buscador de Alérgenos | Casa Kiki</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Consulta de alérgenos | Casa Kiki</title>
   <style>
-    :root{
-      --bg:#f5f7fa;--card:#fff;--text:#1f2937;--muted:#6b7280;--main:#0f75a8;--danger:#fee2e2;--danger-b:#dc2626;--warn:#fef3c7;--warn-b:#d97706;--ok:#dcfce7;--ok-b:#16a34a;--line:#e5e7eb;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
-    header{background:linear-gradient(135deg,#0f75a8,#063d5c);color:white;padding:28px 18px;text-align:center}
-    header h1{margin:0;font-size:30px} header p{margin:8px 0 0;opacity:.9}
-    main{max-width:1100px;margin:0 auto;padding:22px}
-    .panel{background:var(--card);border-radius:16px;padding:20px;box-shadow:0 8px 25px rgba(0,0,0,.08);margin-bottom:18px}
-    .row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
-    input{width:100%;font-size:18px;padding:15px;border:2px solid var(--line);border-radius:12px;outline:none} input:focus{border-color:var(--main)}
-    button{border:0;background:var(--main);color:white;padding:14px 18px;border-radius:12px;font-size:16px;cursor:pointer}button:hover{filter:brightness(.95)}
-    .status{font-size:14px;color:var(--muted);margin-top:10px}.error{color:#b91c1c;font-weight:bold}.success{color:#166534}
-    .suggestions{margin-top:12px;display:grid;gap:8px}.suggestion{padding:12px;border:1px solid var(--line);border-radius:10px;background:#fafafa;cursor:pointer}.suggestion:hover{background:#eef6fb;border-color:#9bd1ec}
-    .product-title{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:14px}.product-title h2{margin:0;font-size:25px}.badge{font-size:13px;border-radius:999px;padding:6px 10px;background:#eef2ff;color:#3730a3;white-space:nowrap}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.box{border-radius:14px;padding:16px;border:1px solid var(--line)}.box h3{margin:0 0 10px}.contains{background:var(--danger);border-color:#fecaca}.traces{background:var(--warn);border-color:#fde68a}.free{background:var(--ok);border-color:#bbf7d0}.pillwrap{display:flex;flex-wrap:wrap;gap:8px}.pill{font-weight:bold;padding:8px 10px;border-radius:999px;background:white;border:1px solid rgba(0,0,0,.1)}
-    .notes{margin-top:14px;padding:14px;border-left:5px solid var(--main);background:#f8fafc;border-radius:10px}.small{font-size:13px;color:var(--muted)}
-    footer{text-align:center;color:var(--muted);font-size:13px;padding:15px 20px 30px}
-    @media(max-width:760px){.row{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.product-title{display:block}.badge{display:inline-block;margin-top:8px}header h1{font-size:24px}}
+    :root{--bg:#faf7f2;--card:#fff;--text:#2b2b2b;--muted:#686868;--brand:#9b1c31;--brand2:#c99a43;--danger:#fff0f0;--danger-b:#d44848;--trace:#fff8dd;--trace-b:#d09a00;--ok:#eef9ef;--ok-b:#4a9b56;--line:#e7dfd7}
+    *{box-sizing:border-box} body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1050px;margin:auto;padding:24px}
+    header{background:linear-gradient(135deg,var(--brand),#5c1020);color:white;border-radius:18px;padding:26px;margin-bottom:18px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+    h1{margin:0 0 8px;font-size:30px}.subtitle{opacity:.92;margin:0;font-size:16px;line-height:1.4}
+    .toolbar{display:grid;grid-template-columns:1fr auto;gap:12px;margin:18px 0}.searchbox{position:relative}
+    input{width:100%;font-size:20px;padding:15px 16px;border:2px solid var(--line);border-radius:14px;background:#fff;outline:none} input:focus{border-color:var(--brand2);box-shadow:0 0 0 4px rgba(201,154,67,.18)}
+    button{border:0;background:var(--brand);color:white;font-weight:bold;padding:14px 18px;border-radius:14px;cursor:pointer;font-size:15px} button:hover{filter:brightness(.95)}
+    .status{font-size:14px;color:var(--muted);margin:8px 0 16px}.status.ok{color:#237234}.status.err{color:#a31616;white-space:pre-wrap}
+    .grid{display:grid;grid-template-columns:340px 1fr;gap:18px}.panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+    .list{max-height:560px;overflow:auto}.item{padding:12px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:10px}.item:hover,.item.active{background:#f6efe7}.item small{display:block;color:var(--muted);margin-top:4px}
+    .empty{color:var(--muted);padding:18px;text-align:center}.result h2{margin:0 0 8px;font-size:26px}.family{color:var(--muted);margin-bottom:14px}
+    .box{border-left:6px solid;border-radius:14px;padding:14px;margin:13px 0}.box h3{margin:0 0 10px}.danger{background:var(--danger);border-color:var(--danger-b)}.trace{background:var(--trace);border-color:var(--trace-b)}.okbox{background:var(--ok);border-color:var(--ok-b)}
+    .tags{display:flex;flex-wrap:wrap;gap:8px}.tag{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:8px 11px;font-weight:bold;background:white;border:1px solid rgba(0,0,0,.08)}
+    .tag.d{color:#a31616}.tag.t{color:#8a6500}.note{font-size:13px;color:var(--muted);line-height:1.45;margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+    .print{background:#4b4b4b;margin-left:8px}.hide{display:none!important}
+    @media(max-width:760px){.wrap{padding:14px}.toolbar{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.list{max-height:260px}h1{font-size:24px}input{font-size:18px}.panel{padding:13px}}
+    @media print{body{background:white}.toolbar,.listpanel,button,.status,.note{display:none}.grid{display:block}.panel{box-shadow:none;border:0}.wrap{max-width:none}.result h2{font-size:24px}}
   </style>
 </head>
 <body>
-<header>
-  <h1>Buscador de Alérgenos</h1>
-  <p>Casa Kiki · Consulta de alérgenos y posibles trazas</p>
-</header>
-<main>
-  <section class="panel">
-    <div class="row">
-      <input id="search" type="text" placeholder="Escribe el nombre del producto..." autocomplete="off" />
-      <button onclick="loadData(true)">Actualizar datos</button>
-    </div>
-    <div id="status" class="status">Cargando datos desde Google Sheets...</div>
-    <div id="suggestions" class="suggestions"></div>
-  </section>
-  <section id="result"></section>
-</main>
-<footer>La información se toma directamente de la hoja publicada de Google Sheets. Revise siempre la ficha técnica ante dudas.</footer>
-<script>
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTy0R-i-W28iW5aOmO5c3K8ryVNWqoIgZrQWNbQqnQ6HFAlZw-V38dcsxyx5FFktQ/pub?gid=1520357358&single=true&output=csv";
-const ALLERGEN_START_COL = 2; // 0=Producto, 1=Alérgenos Contenido, desde 2 columnas de alérgenos
-let products = [];
-let headers = [];
+  <div class="wrap">
+    <header>
+      <h1>Consulta de alérgenos</h1>
+      <p class="subtitle">Casa Kiki · Datos leídos directamente desde Google Sheets publicado</p>
+    </header>
 
-function normalize(txt){return String(txt||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();}
-function esc(txt){return String(txt??"").replace(/[&<>'"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[m]));}
-function parseCSV(text){
-  const rows=[]; let row=[], cell='', inQuotes=false;
-  for(let i=0;i<text.length;i++){
-    const c=text[i], n=text[i+1];
-    if(c==='"'){
-      if(inQuotes && n==='"'){cell+='"';i++;} else inQuotes=!inQuotes;
-    } else if(c===',' && !inQuotes){row.push(cell);cell='';
-    } else if((c==='\n'||c==='\r') && !inQuotes){
-      if(c==='\r' && n==='\n') i++;
-      row.push(cell); if(row.some(v=>String(v).trim()!=='')) rows.push(row); row=[]; cell='';
-    } else cell+=c;
-  }
-  row.push(cell); if(row.some(v=>String(v).trim()!=='')) rows.push(row);
-  return rows;
-}
-function analyzeRow(row){
-  const present=[], traces=[];
-  for(let i=ALLERGEN_START_COL;i<headers.length;i++){
-    const allergen=(headers[i]||'').trim(); if(!allergen) continue;
-    const value=normalize(row[i]);
-    if(value.includes('puede contener')) traces.push(allergen);
-    else if(value.includes('contiene')) present.push(allergen);
-  }
-  return {present,traces};
-}
-async function loadData(manual=false){
-  const status=document.getElementById('status');
-  status.className='status'; status.textContent='Cargando datos desde Google Sheets...';
+    <div class="toolbar">
+      <div class="searchbox"><input id="q" placeholder="Escribe el nombre del producto…" autocomplete="off" disabled></div>
+      <div><button id="refresh">Actualizar datos</button><button class="print" onclick="window.print()">Imprimir ficha</button></div>
+    </div>
+    <div id="status" class="status">Cargando datos desde Google Sheets…</div>
+
+    <div class="grid">
+      <div class="panel listpanel">
+        <strong>Productos encontrados</strong>
+        <div id="list" class="list"><div class="empty">Cargando…</div></div>
+      </div>
+      <div class="panel result" id="result">
+        <div class="empty">Selecciona o busca un producto para consultar sus alérgenos.</div>
+      </div>
+    </div>
+
+    <p class="note"><strong>Criterio:</strong> “Contiene” se muestra como alérgeno presente. “Puede contener trazas” se muestra como posible traza. La información depende de la actualización y exactitud de la hoja de Google Sheets publicada.</p>
+  </div>
+<script>
+const SHEET_ID = '2PACX-1vTy0R-i-W28iW5aOmO5c3K8ryVNWqoIgZrQWNbQqnQ6HFAlZw-V38dcsxyx5FFktQ';
+const GID = '1520357358';
+const GVIZ_URL = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/gviz/tq?gid=${GID}`;
+const ALLERGEN_START_INDEX = 2;
+let productos = [];
+let selectedIndex = -1;
+let currentScript = null;
+
+const $ = id => document.getElementById(id);
+function setStatus(msg, cls='') { const el=$('status'); el.className='status '+cls; el.textContent=msg; }
+function normalize(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();}
+function esc(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+
+window.handleGvizResponse = function(resp){
   try{
-    const url=CSV_URL + '&t=' + Date.now();
-    const res=await fetch(url,{cache:'no-store'});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const text=await res.text();
-    const rows=parseCSV(text);
-    if(rows.length<2) throw new Error('La hoja no tiene datos suficientes');
-    headers=rows[0].map(h=>String(h||'').trim());
-    products=rows.slice(1).map((row,idx)=>{
-      const a=analyzeRow(row);
-      return {id:idx,nombre:String(row[0]||'').trim(),contenido:String(row[1]||'').trim(),observaciones:String(row[18]||'').trim(), present:a.present, traces:a.traces, raw:row};
-    }).filter(p=>p.nombre);
-    status.className='status success';
-    status.textContent=`Datos cargados correctamente: ${products.length} productos.`;
-    if(manual) searchNow();
-  }catch(e){
-    status.className='status error';
-    status.innerHTML='No se han podido cargar los datos desde Google Sheets. Detalle: '+esc(e.message)+'<br>Cuando esté subido a GitHub Pages debería funcionar con esta misma versión.';
+    if(!resp || resp.status === 'error') throw new Error(resp?.errors?.[0]?.detailed_message || 'Respuesta GViz no válida');
+    const table = resp.table;
+    if(!table || !table.cols || !table.rows) throw new Error('Google no ha devuelto una tabla de datos');
+    const headers = table.cols.map((c,i)=> (c.label || c.id || `Columna ${i+1}`).trim());
+    const rows = table.rows.map(r => (r.c || []).map(c => c ? (c.f ?? c.v ?? '') : ''));
+    productos = rows.map(row => buildProduct(headers,row)).filter(p => p.nombre);
+    if(!productos.length) throw new Error('No se han encontrado productos en la hoja');
+    $('q').disabled = false;
+    $('q').focus();
+    setStatus(`Datos cargados correctamente: ${productos.length} productos. Última actualización: ${new Date().toLocaleString('es-ES')}`, 'ok');
+    renderList(productos.slice(0,60));
+    $('result').innerHTML = '<div class="empty">Escribe o selecciona un producto para ver sus alérgenos.</div>';
+  } catch(e){ showError(e.message || e); }
+};
+
+function buildProduct(headers,row){
+  const nombre = String(row[0] || '').trim();
+  const familia = String(row[1] || '').trim();
+  const alergenos = [], trazas = [];
+  for(let i=ALLERGEN_START_INDEX; i<headers.length; i++){
+    const allergen = String(headers[i] || '').trim();
+    const val = normalize(row[i]);
+    if(!allergen || !val) continue;
+    if(val.includes('puede contener')) trazas.push(allergen);
+    else if(val.includes('contiene')) alergenos.push(allergen);
   }
+  return {nombre, familia, alergenos, trazas, search: normalize(nombre + ' ' + familia + ' ' + alergenos.join(' ') + ' ' + trazas.join(' '))};
 }
-function searchNow(){
-  const q=normalize(document.getElementById('search').value);
-  const sug=document.getElementById('suggestions'); const res=document.getElementById('result');
-  sug.innerHTML=''; res.innerHTML='';
-  if(!q){return;}
-  const matches=products.filter(p=>normalize(p.nombre).includes(q) || normalize(p.contenido).includes(q)).slice(0,12);
-  if(matches.length===0){sug.innerHTML='<div class="suggestion">No se ha encontrado ningún producto.</div>';return;}
-  if(matches.length===1 || normalize(matches[0].nombre)===q){showProduct(matches[0]);return;}
-  sug.innerHTML=matches.map(p=>`<div class="suggestion" onclick="selectProduct(${p.id})"><b>${esc(p.nombre)}</b><br><span class="small">${esc(p.contenido||'')}</span></div>`).join('');
+
+function showError(detail){
+  $('q').disabled = true;
+  $('list').innerHTML = '<div class="empty">No se han podido cargar los productos.</div>';
+  setStatus('No se han podido cargar los datos desde Google Sheets.\nDetalle: ' + detail + '\nComprueba que la hoja sigue publicada en la web y que GitHub Pages ha terminado de actualizarse.', 'err');
 }
-function selectProduct(id){const p=products.find(x=>x.id===id); if(p){document.getElementById('search').value=p.nombre;document.getElementById('suggestions').innerHTML='';showProduct(p);}}
-function pills(arr){return arr.length?`<div class="pillwrap">${arr.map(x=>`<span class="pill">${esc(x)}</span>`).join('')}</div>`:'<span class="small">No constan.</span>';}
-function showProduct(p){
-  document.getElementById('result').innerHTML=`<div class="panel"><div class="product-title"><div><h2>${esc(p.nombre)}</h2><div class="small">${esc(p.contenido||'')}</div></div><span class="badge">Producto</span></div><div class="grid"><div class="box contains"><h3>Alérgenos presentes</h3>${pills(p.present)}</div><div class="box traces"><h3>Puede contener trazas</h3>${pills(p.traces)}</div></div>${p.present.length===0&&p.traces.length===0?'<div class="box free" style="margin-top:14px"><h3>Sin alérgenos declarados</h3><span class="small">No aparecen alérgenos ni trazas en las columnas revisadas.</span></div>':''}${p.observaciones?`<div class="notes"><b>Observaciones:</b><br>${esc(p.observaciones)}</div>`:''}<p class="small">Criterio: “Contiene” = presencia del alérgeno. “Puede contener trazas” = posible presencia por trazas.</p></div>`;
+
+function loadData(){
+  setStatus('Cargando datos desde Google Sheets…');
+  $('q').disabled = true;
+  $('list').innerHTML = '<div class="empty">Cargando…</div>';
+  $('result').innerHTML = '<div class="empty">Cargando base de datos…</div>';
+  if(currentScript) currentScript.remove();
+  const s = document.createElement('script');
+  currentScript = s;
+  s.src = GVIZ_URL + '&tqx=responseHandler:handleGvizResponse&cachebust=' + Date.now();
+  s.onerror = () => showError('Google ha bloqueado o no ha devuelto el script GViz.');
+  document.body.appendChild(s);
+  setTimeout(()=>{
+    if($('q').disabled && productos.length===0) showError('Tiempo de espera agotado al consultar Google Sheets.');
+  }, 12000);
 }
-document.getElementById('search').addEventListener('input', searchNow);
-loadData(false);
+
+function filterProducts(){
+  const q = normalize($('q').value);
+  if(!q){ renderList(productos.slice(0,60)); return; }
+  const words = q.split(' ').filter(Boolean);
+  const matches = productos.filter(p => words.every(w => p.search.includes(w))).slice(0,80);
+  renderList(matches);
+  if(matches.length === 1) selectProduct(matches[0]);
+}
+function renderList(items){
+  const list = $('list');
+  if(!items.length){ list.innerHTML='<div class="empty">No se han encontrado productos.</div>'; return; }
+  list.innerHTML = items.map((p,i)=>`<div class="item" data-name="${esc(p.nombre)}"><strong>${esc(p.nombre)}</strong>${p.familia?`<small>${esc(p.familia)}</small>`:''}</div>`).join('');
+  [...list.querySelectorAll('.item')].forEach(el=>el.addEventListener('click',()=>selectProduct(productos.find(p=>p.nombre===el.dataset.name))));
+}
+function selectProduct(p){
+  if(!p) return;
+  $('q').value = p.nombre;
+  renderProduct(p);
+}
+function tagList(arr,type){
+  if(!arr.length) return '<span class="tag">No consta</span>';
+  return arr.map(a=>`<span class="tag ${type}">${esc(a)}</span>`).join('');
+}
+function renderProduct(p){
+  const hasAny = p.alergenos.length || p.trazas.length;
+  $('result').innerHTML = `
+    <h2>${esc(p.nombre)}</h2>
+    ${p.familia?`<div class="family">${esc(p.familia)}</div>`:''}
+    ${hasAny ? '' : '<div class="box okbox"><h3>Sin alérgenos declarados</h3><p>No constan alérgenos presentes ni posibles trazas en la hoja.</p></div>'}
+    <div class="box danger"><h3>Alérgenos presentes</h3><div class="tags">${tagList(p.alergenos,'d')}</div></div>
+    <div class="box trace"><h3>Puede contener trazas de</h3><div class="tags">${tagList(p.trazas,'t')}</div></div>
+  `;
+}
+
+$('q').addEventListener('input', filterProducts);
+$('refresh').addEventListener('click', loadData);
+loadData();
 </script>
 </body>
 </html>
