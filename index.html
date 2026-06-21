@@ -51,18 +51,19 @@ function loadData(){
       const headers = table.cols.map(c => (c.label || c.id || '').trim());
       productos = table.rows.map(r => {
         const vals = (r.c || []).map(cellValue);
-        const nombre = vals[0] || '';
-        const resumen = vals[1] || '';
+        const familia = vals[0] || '';
+        const nombre = vals[1] || '';
+        const resumen = vals[2] || '';
         const contiene = [];
         const trazas = [];
-        for(let i=2;i<headers.length;i++){
+        for(let i=3;i<headers.length;i++){
           const alergeno = headers[i];
           const valor = norm(vals[i]);
           if(!alergeno || !valor) continue;
           if(valor.includes('puede contener')) trazas.push(alergeno);
           else if(valor.includes('contiene')) contiene.push(alergeno);
         }
-        return {nombre, resumen, contiene, trazas, search:norm(nombre+' '+resumen+' '+contiene.join(' ')+' '+trazas.join(' '))};
+        return {familia, nombre, resumen, contiene, trazas, search:norm(familia+' '+nombre+' '+resumen+' '+contiene.join(' ')+' '+trazas.join(' '))};
       }).filter(p => p.nombre);
       $('search').disabled = false;
       setStatus(`${productos.length} productos cargados correctamente`);
@@ -85,7 +86,7 @@ function renderList(list){
 function renderProduct(p){
   const contiene = p.contiene.length ? `<div class="chips">${p.contiene.map(a=>`<span class="chip">${escapeHtml(a)}</span>`).join('')}</div>` : `<div class="empty">No se indican alérgenos presentes.</div>`;
   const trazas = p.trazas.length ? `<div class="chips">${p.trazas.map(a=>`<span class="chip">${escapeHtml(a)}</span>`).join('')}</div>` : `<div class="empty">No se indican trazas.</div>`;
-  return `<article class="card"><div class="name">${escapeHtml(p.nombre)}</div>${p.resumen?`<div class="summary">${escapeHtml(p.resumen)}</div>`:''}<div class="box danger"><div class="label">Contiene</div>${contiene}</div><div class="box warning"><div class="label">Puede contener trazas de</div>${trazas}</div></article>`;
+  return `<article class="card"><div class="name">${escapeHtml(p.nombre)}</div>${p.familia?`<div class="summary"><b>Familia:</b> ${escapeHtml(p.familia)}</div>`:''}${p.resumen?`<div class="summary"><b>Alérgenos indicados:</b> ${escapeHtml(p.resumen)}</div>`:''}<div class="box danger"><div class="label">Contiene</div>${contiene}</div><div class="box warning"><div class="label">Puede contener trazas de</div>${trazas}</div></article>`;
 }
 function onSearch(){
   const q = norm($('search').value);
