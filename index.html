@@ -16,7 +16,7 @@
   <div class="wrap">
     <div class="card">
       <h1>Buscador de alérgenos</h1>
-      <p class="sub">Casa Kiki · Datos tomados directamente de Google Sheets. Esta versión revisa siempre los 14 alérgenos con criterio estricto: cada alérgeno se toma solo de su propia columna.</p>
+      <p class="sub">Este buscador es una herramienta para la información al consumidor, y a cualquier persona interesada, en la presencia de alérgenos en el producto. Tan solo tiene que escribir el nombre del producto del que quiere conocer los alérgenos y el buscador mostrará la información relativa a presencia de forma intencionada y de trazas presentes en el producto, todo de acuerdo a lo establecido dentro del Reglamento 1169/2011 y recomendaciones EPA de AESAN.</p>
       <div class="row">
         <input id="q" class="search" placeholder="Escribe el nombre del producto..." autocomplete="off" />
         <button id="reload">Actualizar datos</button>
@@ -24,30 +24,24 @@
       </div>
       <div id="status" class="status">Cargando datos...</div>
       <div id="results" class="results"></div>
-      <details>
-        <summary>Si no carga</summary>
-        <p>La opción más estable es usar Apps Script como puente entre Google Sheets y esta web. El HTML seguirá actualizándose desde Google Sheets, pero sin depender de GViz.</p>
-      </details>
-      <div class="footer">Criterio: <b>Contiene</b> = presencia del alérgeno en su columna específica. <b>Puede contener trazas</b>, <b>trazas</b> o <b>posible presencia</b> = traza solo si aparece en la columna específica de ese alérgeno. Las frases negativas como <b>no presente como adición, ni como traza</b> se tratan como NO.</div>
     </div>
   </div>
 <script>
 (function(){
   /*
     IMPORTANTE
-    Para que se actualice directamente desde Google Sheets sin depender de GViz,
-    pega aquí la URL de tu Apps Script publicado como Web App.
+    Para que se actualice directamente desde base de datos sin depender de carga directa,
+    pega aquí la URL de tu conector publicado como Web App.
 
     Ejemplo:
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxxxxxxxx/exec';
 
     Mientras esté vacío, el HTML intentará usar métodos públicos de Google como respaldo,
-    pero lo más estable es Apps Script.
+    pero lo más estable es conector.
   */
   const APPS_SCRIPT_URL = '';
 
-  // ID del Google Sheets original. Vale para el método de respaldo.
-  const SPREADSHEET_ID = '1VA4VnLUsLft5FN_qHDcmmw-zLFra-R6j';
+    const SPREADSHEET_ID = '1VA4VnLUsLft5FN_qHDcmmw-zLFra-R6j';
   const GID = '0';
 
   const statusEl = document.getElementById('status');
@@ -197,11 +191,11 @@
 
   async function loadFromAppsScript(){
     const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?t=' + Date.now(), 15000);
-    if(!res.ok) throw new Error('Apps Script HTTP ' + res.status);
+    if(!res.ok) throw new Error('conector HTTP ' + res.status);
     const data = await res.json();
     if(Array.isArray(data)) return data;
     if(data && Array.isArray(data.rows)) return data.rows;
-    throw new Error('Apps Script no ha devuelto filas JSON válidas.');
+    throw new Error('conector no ha devuelto filas JSON válidas.');
   }
 
   async function loadFromFallbacks(){
@@ -221,11 +215,11 @@
         return tableToObjects(parseCSV(text));
       }catch(e){ lastError = e.message; }
     }
-    throw new Error(lastError || 'No se pudo leer Google Sheets');
+    throw new Error(lastError || 'No se pudo leer base de datos');
   }
 
   async function load(){
-    setStatus('Cargando datos desde Google Sheets...'); rows = []; resultsEl.innerHTML = '';
+    setStatus('Cargando datos...'); rows = []; resultsEl.innerHTML = '';
     try{
       if(APPS_SCRIPT_URL.trim()) rows = await loadFromAppsScript();
       else rows = await loadFromFallbacks();
@@ -233,7 +227,7 @@
       setStatus('Datos cargados correctamente: ' + rows.length + ' productos. Se revisan los 14 alérgenos obligatorios. Criterio estricto: solo se marca un alérgeno si su propia columna lo indica.', 'ok');
       render();
     }catch(e){
-      setStatus('No se han podido cargar los datos. Para actualización directa estable usa Apps Script y pega su URL en APPS_SCRIPT_URL. Detalle: ' + e.message, 'error');
+      setStatus('No se han podido cargar los datos. Revise la conexión con la base de datos. Detalle: ' + e.message, 'error');
     }
   }
 
@@ -246,8 +240,7 @@
     resultsEl.innerHTML = matches.map(r => {
       const name = getProductName(r) || 'Producto sin nombre';
       const famKey = findAnyKey(r,['Familia','Tipo','Categoría','Categoria','Grupo']);
-      const obsKey = findAnyKey(r,['Observaciones','Observación','Observacion','Notas','Comentario','Comentarios']);
-      const fam = famKey ? clean(r[famKey]) : ''; const obs = obsKey ? clean(r[obsKey]) : ''; const contText = getContainedText(r);
+      const fam = famKey ? clean(r[famKey]) : ''; const contText = getContainedText(r);
       const c = classifyRow(r);
       const table = '<table><thead><tr><th>Alérgeno</th><th>Estado</th><th>Dato origen</th></tr></thead><tbody>' +
         c.detail.map(d => '<tr><td>'+escapeHtml(d.alergeno)+'</td><td class="'+estadoClass(d.estado)+'">'+estadoText(d.estado)+'</td><td>'+escapeHtml(d.valor || '')+'</td></tr>').join('') + '</tbody></table>';
@@ -258,7 +251,6 @@
         '<div class="section"><div class="label">Alérgenos presentes</div><div class="chips">' + (c.presentes.length ? c.presentes.map(a=>chip(a,'present')).join('') : chip('Sin alérgenos presentes indicados','none')) + '</div></div>' +
         '<div class="section"><div class="label">Puede contener trazas</div><div class="chips">' + (c.trazas.length ? c.trazas.map(a=>chip(a,'trace')).join('') : chip('Sin trazas indicadas','none')) + '</div></div>' +
         '<details class="section"><summary>Ver los 14 alérgenos revisados</summary>'+table+'</details>' +
-        (obs ? '<div class="section"><div class="label">Observaciones</div><div>'+escapeHtml(obs)+'</div></div>' : '') +
         '</div>';
     }).join('');
   }
