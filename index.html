@@ -16,7 +16,7 @@
   <div class="wrap">
     <div class="card">
       <h1>Buscador de alérgenos</h1>
-      <p class="sub">Casa Kiki · Datos tomados directamente de Google Sheets. Esta versión revisa siempre los 14 alérgenos y solo muestra como presentes o trazas los que la base indique expresamente.</p>
+      <p class="sub">Casa Kiki · Datos tomados directamente de Google Sheets. Esta versión revisa siempre los 14 alérgenos con criterio estricto: cada alérgeno se toma solo de su propia columna.</p>
       <div class="row">
         <input id="q" class="search" placeholder="Escribe el nombre del producto..." autocomplete="off" />
         <button id="reload">Actualizar datos</button>
@@ -28,7 +28,7 @@
         <summary>Si no carga</summary>
         <p>La opción más estable es usar Apps Script como puente entre Google Sheets y esta web. El HTML seguirá actualizándose desde Google Sheets, pero sin depender de GViz.</p>
       </details>
-      <div class="footer">Criterio: <b>Contiene</b> = presencia de alérgeno. <b>Puede contener trazas</b>, <b>trazas</b> o <b>posible presencia</b> = traza solo si aparece en la columna del alérgeno. Las frases negativas como <b>no presente como adición, ni como traza</b> se tratan como NO.</div>
+      <div class="footer">Criterio: <b>Contiene</b> = presencia del alérgeno en su columna específica. <b>Puede contener trazas</b>, <b>trazas</b> o <b>posible presencia</b> = traza solo si aparece en la columna específica de ese alérgeno. Las frases negativas como <b>no presente como adición, ni como traza</b> se tratan como NO.</div>
     </div>
   </div>
 <script>
@@ -110,14 +110,25 @@
   function findHeader(row, allergen){
     const keys = Object.keys(row);
     const nkeys = keys.map(k => norm(k));
+
+    // MUY IMPORTANTE: solo se acepta una columna si su CABECERA identifica ese alérgeno.
+    // No buscamos el alérgeno en toda la fila ni en ingredientes, porque eso genera falsos positivos.
+    // Tampoco aceptamos columnas genéricas tipo "Alérgenos", "Puede contener" o "Observaciones" como columna individual.
+    const genericHeaders = ['alergenos','alergenos contenido','alergenos contenidos','contiene','puede contener','observaciones','observacion','notas','comentarios','comentario','ingredientes','denominacion','descripcion','producto'];
+
     for(const alias of allergen.aliases){
       const na = norm(alias);
       const exact = nkeys.indexOf(na);
       if(exact !== -1) return keys[exact];
     }
+
     for(const alias of allergen.aliases){
       const na = norm(alias);
-      const ix = nkeys.findIndex(k => k.includes(na) || na.includes(k));
+      const ix = nkeys.findIndex(k => {
+        if(genericHeaders.includes(k)) return false;
+        if(k.length < 3) return false;
+        return k.includes(na);
+      });
       if(ix !== -1) return keys[ix];
     }
     return null;
@@ -143,33 +154,16 @@
   }
 
   function getProductName(r){ const k = findAnyKey(r,['Producto','PRODUCTO','producto','Nombre producto','Denominación','Denominacion','Descripción','Descripcion','Articulo','Artículo']); return k ? clean(r[k]) : ''; }
-  function getContainedText(r){ const k = findAnyKey(r,['Alérgenos Contenido','Alergenos Contenido','Alérgenos contenidos','Alergenos contenidos','Alérgenos','Alergenos','Contiene','Puede contener']); return k ? clean(r[k]) : ''; }
-
-  function textHasTraceFor(text, allergen){
-    const t = norm(text);
-    if(!t) return false;
-    return allergen.aliases.some(alias => {
-      const a = norm(alias);
-      return (t.includes('traza') && t.includes(a)) || (t.includes('puede contener') && t.includes(a)) || (t.includes('posible presencia') && t.includes(a));
-    });
-  }
-  function textHasPresenceFor(text, allergen){
-    const t = norm(text);
-    if(!t) return false;
-    return allergen.aliases.some(alias => t.includes(norm(alias)));
-  }
+  function getContainedText(r){ const k = findAnyKey(r,['Alérgenos Contenido','Alergenos Contenido','Alérgenos contenidos','Alergenos contenidos','Alérgenos','Alergenos']); return k ? clean(r[k]) : ''; }
 
   function classifyRow(r){
-    const fullText = Object.entries(r).map(([k,v]) => k + ' ' + v).join(' ');
-    const containedText = getContainedText(r);
     const detail = ALLERGENS.map(a => {
       const key = findHeader(r, a);
       let estado = key ? classifyValue(r[key]) : 'sin';
-      // No inferimos trazas desde todo el texto de la fila, porque genera falsos positivos cuando la ficha dice
-      // "no presente como adición, ni como traza". Solo usamos el dato de la columna del alérgeno.
-      // Como respaldo, si existe una columna resumen de "Alérgenos/Contiene", solo se usa para presencia directa,
-      // no para convertir automáticamente una frase negativa en traza.
-      if(estado === 'sin' && textHasPresenceFor(containedText, a)) estado = 'contiene';
+
+      // Criterio corregido: NO se deduce ningún alérgeno desde ingredientes, denominación, observaciones
+      // ni columnas resumen. Solo manda la celda de la columna específica de ese alérgeno.
+      // Si no hay columna específica, se muestra "Sin dato", pero nunca se marca como contiene/traza.
       return {alergeno:a.name, estado, valor:key ? clean(r[key]) : ''};
     });
     return {
@@ -236,7 +230,7 @@
       if(APPS_SCRIPT_URL.trim()) rows = await loadFromAppsScript();
       else rows = await loadFromFallbacks();
       if(!rows.length) throw new Error('No se han encontrado filas de productos.');
-      setStatus('Datos cargados correctamente: ' + rows.length + ' productos. Se revisan los 14 alérgenos obligatorios. Solo se muestran trazas/presencia cuando la base lo indica expresamente.', 'ok');
+      setStatus('Datos cargados correctamente: ' + rows.length + ' productos. Se revisan los 14 alérgenos obligatorios. Criterio estricto: solo se marca un alérgeno si su propia columna lo indica.', 'ok');
       render();
     }catch(e){
       setStatus('No se han podido cargar los datos. Para actualización directa estable usa Apps Script y pega su URL en APPS_SCRIPT_URL. Detalle: ' + e.message, 'error');
