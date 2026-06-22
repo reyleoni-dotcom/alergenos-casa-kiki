@@ -16,7 +16,7 @@
   <div class="wrap">
     <div class="card">
       <h1>Buscador de alérgenos</h1>
-      <p class="sub">Casa Kiki · Datos tomados directamente de Google Sheets. Esta versión revisa siempre los 14 alérgenos y muestra también los indicados como trazas.</p>
+      <p class="sub">Casa Kiki · Datos tomados directamente de Google Sheets. Esta versión revisa siempre los 14 alérgenos y solo muestra como presentes o trazas los que la base indique expresamente.</p>
       <div class="row">
         <input id="q" class="search" placeholder="Escribe el nombre del producto..." autocomplete="off" />
         <button id="reload">Actualizar datos</button>
@@ -26,16 +26,30 @@
       <div id="results" class="results"></div>
       <details>
         <summary>Si no carga</summary>
-        <p>Esta versión usa CSV publicado de Google Sheets. En Google Sheets debe estar activado <b>Archivo &gt; Compartir &gt; Publicar en la web</b>, seleccionando la pestaña correcta y formato CSV o web.</p>
+        <p>La opción más estable es usar Apps Script como puente entre Google Sheets y esta web. El HTML seguirá actualizándose desde Google Sheets, pero sin depender de GViz.</p>
       </details>
-      <div class="footer">Criterio: <b>Contiene</b> = presencia de alérgeno. <b>Puede contener trazas</b>, <b>trazas</b> o <b>posible presencia</b> = traza del alérgeno de esa columna.</div>
+      <div class="footer">Criterio: <b>Contiene</b> = presencia de alérgeno. <b>Puede contener trazas</b>, <b>trazas</b> o <b>posible presencia</b> = traza solo si aparece en la columna del alérgeno. Las frases negativas como <b>no presente como adición, ni como traza</b> se tratan como NO.</div>
     </div>
   </div>
 <script>
 (function(){
-  // ID público de publicación de Google Sheets. Debe estar publicado en Archivo > Compartir > Publicar en la web.
-  const PUBLISHED_SHEET_ID = '2PACX-1vTy0R-i-W28iW5aOmO5c3K8ryVNWqoIgZrQWNbQqnQ6HFAlZw-V38dcsxyx5FFktQ';
-  const GID = '1520357358';
+  /*
+    IMPORTANTE
+    Para que se actualice directamente desde Google Sheets sin depender de GViz,
+    pega aquí la URL de tu Apps Script publicado como Web App.
+
+    Ejemplo:
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxxxxxxxx/exec';
+
+    Mientras esté vacío, el HTML intentará usar métodos públicos de Google como respaldo,
+    pero lo más estable es Apps Script.
+  */
+  const APPS_SCRIPT_URL = '';
+
+  // ID del Google Sheets original. Vale para el método de respaldo.
+  const SPREADSHEET_ID = '1VA4VnLUsLft5FN_qHDcmmw-zLFra-R6j';
+  const GID = '0';
+
   const statusEl = document.getElementById('status');
   const qEl = document.getElementById('q');
   const resultsEl = document.getElementById('results');
@@ -90,7 +104,7 @@
     const headers = table[0].map((h,i) => clean(h) || ('Columna '+(i+1)));
     return table.slice(1).map(r => {
       const obj = {}; headers.forEach((h,i) => obj[h] = clean(r[i] || '')); return obj;
-    }).filter(r => getProductName(r) || getContainedText(r) || Object.values(r).some(Boolean));
+    }).filter(r => getProductName(r) || Object.values(r).some(Boolean));
   }
 
   function findHeader(row, allergen){
@@ -119,8 +133,11 @@
   function classifyValue(value){
     const v = norm(value);
     if(!v || ['-','—','no indicado','n/a','na'].includes(v)) return 'sin';
+    // Primero evaluamos las negaciones. Ej.: "no presente como adición, ni como traza" contiene la palabra "traza",
+    // pero debe clasificarse como NO, no como traza.
+    if(v.includes('no presente') || v.includes('no contiene') || v.includes('ausente') || v.includes('sin presencia') || v.includes('no aplica') || v === 'no') return 'no';
+    // Después evaluamos trazas/presencia positiva.
     if(v.includes('puede contener') || v.includes('traza') || v.includes('posible presencia') || v.includes('presencia posible') || v.includes('presencia como traza')) return 'traza';
-    if(v.includes('no presente') || v.includes('no contiene') || v.includes('ausente') || v === 'no') return 'no';
     if(v.includes('contiene') || v.includes('presencia') || ['si','sí','x','1'].includes(v)) return 'contiene';
     return 'sin';
   }
@@ -133,7 +150,7 @@
     if(!t) return false;
     return allergen.aliases.some(alias => {
       const a = norm(alias);
-      return t.includes('traza') && t.includes(a) || t.includes('puede contener') && t.includes(a) || t.includes('posible presencia') && t.includes(a) || t.includes('presencia como traza') && t.includes(a);
+      return (t.includes('traza') && t.includes(a)) || (t.includes('puede contener') && t.includes(a)) || (t.includes('posible presencia') && t.includes(a));
     });
   }
   function textHasPresenceFor(text, allergen){
@@ -148,7 +165,10 @@
     const detail = ALLERGENS.map(a => {
       const key = findHeader(r, a);
       let estado = key ? classifyValue(r[key]) : 'sin';
-      if(estado === 'sin' && textHasTraceFor(fullText, a)) estado = 'traza';
+      // No inferimos trazas desde todo el texto de la fila, porque genera falsos positivos cuando la ficha dice
+      // "no presente como adición, ni como traza". Solo usamos el dato de la columna del alérgeno.
+      // Como respaldo, si existe una columna resumen de "Alérgenos/Contiene", solo se usa para presencia directa,
+      // no para convertir automáticamente una frase negativa en traza.
       if(estado === 'sin' && textHasPresenceFor(containedText, a)) estado = 'contiene';
       return {alergeno:a.name, estado, valor:key ? clean(r[key]) : ''};
     });
@@ -170,20 +190,56 @@
     finally { clearTimeout(timer); }
   }
 
+  function gvizToObjects(text){
+    const jsonText = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+    const data = JSON.parse(jsonText);
+    const cols = data.table.cols.map((c,i) => c.label || ('Columna '+(i+1)));
+    return data.table.rows.map(row => {
+      const obj = {};
+      cols.forEach((h,i) => obj[h] = row.c[i] && row.c[i].v != null ? String(row.c[i].v) : '');
+      return obj;
+    }).filter(r => getProductName(r) || Object.values(r).some(Boolean));
+  }
+
+  async function loadFromAppsScript(){
+    const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?t=' + Date.now(), 15000);
+    if(!res.ok) throw new Error('Apps Script HTTP ' + res.status);
+    const data = await res.json();
+    if(Array.isArray(data)) return data;
+    if(data && Array.isArray(data.rows)) return data.rows;
+    throw new Error('Apps Script no ha devuelto filas JSON válidas.');
+  }
+
+  async function loadFromFallbacks(){
+    const urls = [
+      'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(SPREADSHEET_ID) + '/export?format=csv&gid=' + encodeURIComponent(GID),
+      'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(SPREADSHEET_ID) + '/gviz/tq?tqx=out:csv&gid=' + encodeURIComponent(GID),
+      'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(SPREADSHEET_ID) + '/gviz/tq?tqx=out:json&gid=' + encodeURIComponent(GID)
+    ];
+    let lastError = '';
+    for(const url of urls){
+      try{
+        const res = await fetchWithTimeout(url + '&cachebust=' + Date.now(), 15000);
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        if(!text || text.includes('<!DOCTYPE html') || text.includes('<html')) throw new Error('Google devolvió HTML, no datos');
+        if(url.includes('out:json')) return gvizToObjects(text);
+        return tableToObjects(parseCSV(text));
+      }catch(e){ lastError = e.message; }
+    }
+    throw new Error(lastError || 'No se pudo leer Google Sheets');
+  }
+
   async function load(){
     setStatus('Cargando datos desde Google Sheets...'); rows = []; resultsEl.innerHTML = '';
-    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/' + encodeURIComponent(PUBLISHED_SHEET_ID) + '/pub?gid=' + encodeURIComponent(GID) + '&single=true&output=csv&cachebust=' + Date.now();
     try{
-      const res = await fetchWithTimeout(csvUrl, 15000);
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const text = await res.text();
-      if(!text || text.includes('<!DOCTYPE html') || text.includes('<html')) throw new Error('Google ha devuelto HTML en vez de CSV. La hoja probablemente no está publicada como CSV.');
-      rows = tableToObjects(parseCSV(text));
-      if(!rows.length) throw new Error('CSV vacío o sin filas de productos.');
-      setStatus('Datos cargados correctamente: ' + rows.length + ' productos. Se revisan los 14 alérgenos obligatorios, incluidas trazas.', 'ok');
+      if(APPS_SCRIPT_URL.trim()) rows = await loadFromAppsScript();
+      else rows = await loadFromFallbacks();
+      if(!rows.length) throw new Error('No se han encontrado filas de productos.');
+      setStatus('Datos cargados correctamente: ' + rows.length + ' productos. Se revisan los 14 alérgenos obligatorios. Solo se muestran trazas/presencia cuando la base lo indica expresamente.', 'ok');
       render();
     }catch(e){
-      setStatus('No se han podido cargar los datos. Revisa que la hoja esté publicada en la web como CSV. Detalle: ' + e.message, 'error');
+      setStatus('No se han podido cargar los datos. Para actualización directa estable usa Apps Script y pega su URL en APPS_SCRIPT_URL. Detalle: ' + e.message, 'error');
     }
   }
 
