@@ -26,14 +26,15 @@
       <div id="results" class="results"></div>
       <details>
         <summary>Si no carga</summary>
-        <p>Esta versión usa el endpoint GViz de Google mediante etiqueta <code>script</code>. Si Google cambia permisos o la hoja deja de estar publicada, habría que publicarla de nuevo.</p>
+        <p>Esta versión usa CSV publicado de Google Sheets. En Google Sheets debe estar activado <b>Archivo &gt; Compartir &gt; Publicar en la web</b>, seleccionando la pestaña correcta y formato CSV o web.</p>
       </details>
       <div class="footer">Criterio: <b>Contiene</b> = presencia de alérgeno. <b>Puede contener trazas</b>, <b>trazas</b> o <b>posible presencia</b> = traza del alérgeno de esa columna.</div>
     </div>
   </div>
 <script>
 (function(){
-  const SHEET_ID = '2PACX-1vTy0R-i-W28iW5aOmO5c3K8ryVNWqoIgZrQWNbQqnQ6HFAlZw-V38dcsxyx5FFktQ';
+  // ID público de publicación de Google Sheets. Debe estar publicado en Archivo > Compartir > Publicar en la web.
+  const PUBLISHED_SHEET_ID = '2PACX-1vTy0R-i-W28iW5aOmO5c3K8ryVNWqoIgZrQWNbQqnQ6HFAlZw-V38dcsxyx5FFktQ';
   const GID = '1520357358';
   const statusEl = document.getElementById('status');
   const qEl = document.getElementById('q');
@@ -41,21 +42,20 @@
   const reloadBtn = document.getElementById('reload');
   const clearBtn = document.getElementById('clear');
   let rows = [];
-  let timeoutId = null;
 
   const ALLERGENS = [
-    {name:'Gluten', aliases:['gluten','cereales con gluten']},
+    {name:'Gluten', aliases:['gluten','cereales con gluten','trigo','cebada','centeno','avena','espelta','kamut']},
     {name:'Crustáceos', aliases:['crustaceos','crustáceos','crustaceo','crustáceo']},
-    {name:'Huevos', aliases:['huevo','huevos']},
+    {name:'Huevos', aliases:['huevo','huevos','ovoproducto']},
     {name:'Pescado', aliases:['pescado','pescados']},
     {name:'Cacahuetes', aliases:['cacahuete','cacahuetes','mani','maní']},
-    {name:'Soja', aliases:['soja','soya']},
-    {name:'Leche', aliases:['leche','lacteos','lácteos','lactosa']},
-    {name:'Frutos de cáscara', aliases:['frutos de cascara','frutos de cáscara','frutos secos','almendra','avellana','nuez','pistacho']},
+    {name:'Soja', aliases:['soja','soya','lecitina de soja']},
+    {name:'Leche', aliases:['leche','lacteos','lácteos','lactosa','suero de leche','mantequilla','nata']},
+    {name:'Frutos de cáscara', aliases:['frutos de cascara','frutos de cáscara','frutos secos','almendra','almendras','avellana','avellanas','nuez','nueces','pistacho','pistachos','anacardo','anacardos','pacana','macadamia']},
     {name:'Apio', aliases:['apio']},
     {name:'Mostaza', aliases:['mostaza']},
     {name:'Sésamo', aliases:['sesamo','sésamo','granos de sesamo','granos de sésamo']},
-    {name:'Sulfitos', aliases:['sulfitos','dioxido de azufre','dióxido de azufre','so2']},
+    {name:'Sulfitos', aliases:['sulfitos','sulfito','dioxido de azufre','dióxido de azufre','so2','e220','e221','e222','e223','e224','e226','e227','e228']},
     {name:'Altramuces', aliases:['altramuz','altramuces']},
     {name:'Moluscos', aliases:['molusco','moluscos']}
   ];
@@ -64,7 +64,34 @@
   function clean(s){ return String(s ?? '').trim(); }
   function setStatus(msg, cls=''){ statusEl.className = 'status ' + cls; statusEl.textContent = msg; }
   function escapeHtml(s){ return String(s).replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])); }
-  function cellValue(c){ if(!c) return ''; if(c.f != null) return String(c.f); if(c.v != null) return String(c.v); return ''; }
+
+  function parseCSV(text){
+    text = text.replace(/^\uFEFF/, '');
+    const out = []; let row = [], cell = '', quoted = false;
+    for(let i=0;i<text.length;i++){
+      const ch = text[i], next = text[i+1];
+      if(quoted){
+        if(ch === '"' && next === '"'){ cell += '"'; i++; }
+        else if(ch === '"'){ quoted = false; }
+        else { cell += ch; }
+      }else{
+        if(ch === '"') quoted = true;
+        else if(ch === ','){ row.push(cell); cell = ''; }
+        else if(ch === '\n') { row.push(cell); out.push(row); row = []; cell = ''; }
+        else if(ch !== '\r') cell += ch;
+      }
+    }
+    row.push(cell); out.push(row);
+    return out.filter(r => r.some(c => clean(c) !== ''));
+  }
+
+  function tableToObjects(table){
+    if(!table.length) return [];
+    const headers = table[0].map((h,i) => clean(h) || ('Columna '+(i+1)));
+    return table.slice(1).map(r => {
+      const obj = {}; headers.forEach((h,i) => obj[h] = clean(r[i] || '')); return obj;
+    }).filter(r => getProductName(r) || getContainedText(r) || Object.values(r).some(Boolean));
+  }
 
   function findHeader(row, allergen){
     const keys = Object.keys(row);
@@ -92,30 +119,39 @@
   function classifyValue(value){
     const v = norm(value);
     if(!v || ['-','—','no indicado','n/a','na'].includes(v)) return 'sin';
-    if(v.includes('puede contener') || v.includes('traza') || v.includes('posible presencia') || v.includes('presencia posible')) return 'traza';
+    if(v.includes('puede contener') || v.includes('traza') || v.includes('posible presencia') || v.includes('presencia posible') || v.includes('presencia como traza')) return 'traza';
     if(v.includes('no presente') || v.includes('no contiene') || v.includes('ausente') || v === 'no') return 'no';
-    if(v.includes('contiene') || ['si','sí','x','1'].includes(v)) return 'contiene';
+    if(v.includes('contiene') || v.includes('presencia') || ['si','sí','x','1'].includes(v)) return 'contiene';
     return 'sin';
   }
 
-  function getProductName(r){ return clean(r[findAnyKey(r,['Producto','PRODUCTO','producto','Nombre producto','Denominación','Denominacion','Descripción','Descripcion'])]); }
-  function getContainedText(r){ return clean(r[findAnyKey(r,['Alérgenos Contenido','Alergenos Contenido','Alérgenos contenidos','Alergenos contenidos','Alérgenos','Alergenos','Contiene'])]); }
+  function getProductName(r){ const k = findAnyKey(r,['Producto','PRODUCTO','producto','Nombre producto','Denominación','Denominacion','Descripción','Descripcion','Articulo','Artículo']); return k ? clean(r[k]) : ''; }
+  function getContainedText(r){ const k = findAnyKey(r,['Alérgenos Contenido','Alergenos Contenido','Alérgenos contenidos','Alergenos contenidos','Alérgenos','Alergenos','Contiene','Puede contener']); return k ? clean(r[k]) : ''; }
+
+  function textHasTraceFor(text, allergen){
+    const t = norm(text);
+    if(!t) return false;
+    return allergen.aliases.some(alias => {
+      const a = norm(alias);
+      return t.includes('traza') && t.includes(a) || t.includes('puede contener') && t.includes(a) || t.includes('posible presencia') && t.includes(a) || t.includes('presencia como traza') && t.includes(a);
+    });
+  }
+  function textHasPresenceFor(text, allergen){
+    const t = norm(text);
+    if(!t) return false;
+    return allergen.aliases.some(alias => t.includes(norm(alias)));
+  }
 
   function classifyRow(r){
+    const fullText = Object.entries(r).map(([k,v]) => k + ' ' + v).join(' ');
+    const containedText = getContainedText(r);
     const detail = ALLERGENS.map(a => {
       const key = findHeader(r, a);
       let estado = key ? classifyValue(r[key]) : 'sin';
+      if(estado === 'sin' && textHasTraceFor(fullText, a)) estado = 'traza';
+      if(estado === 'sin' && textHasPresenceFor(containedText, a)) estado = 'contiene';
       return {alergeno:a.name, estado, valor:key ? clean(r[key]) : ''};
     });
-
-    const texto = norm(getContainedText(r));
-    detail.forEach(d => {
-      if(d.estado === 'sin' && texto){
-        const allergen = ALLERGENS.find(a => a.name === d.alergeno);
-        if(allergen.aliases.some(alias => texto.includes(norm(alias)))) d.estado = 'contiene';
-      }
-    });
-
     return {
       detail,
       presentes: detail.filter(d => d.estado === 'contiene').map(d => d.alergeno),
@@ -127,27 +163,28 @@
   function estadoText(e){ return e === 'contiene' ? 'Contiene' : e === 'traza' ? 'Puede contener trazas' : e === 'no' ? 'No indicado como presente/traza' : 'Sin dato'; }
   function estadoClass(e){ return e === 'contiene' ? 'estado-contiene' : e === 'traza' ? 'estado-traza' : e === 'no' ? 'estado-no' : 'estado-sin'; }
 
-  window.__casaKikiCallback = function(resp){
-    clearTimeout(timeoutId);
-    try{
-      if(!resp || resp.status === 'error' || !resp.table) throw new Error(resp && resp.errors ? resp.errors.map(e=>e.detailed_message || e.message).join(' | ') : 'Respuesta no válida de Google Sheets');
-      const cols = resp.table.cols.map(c => clean(c.label || c.id));
-      rows = (resp.table.rows || []).map(r => {
-        const obj = {}; cols.forEach((h,i) => { obj[h || ('Columna '+(i+1))] = cellValue(r.c[i]); }); return obj;
-      }).filter(r => getProductName(r) || getContainedText(r));
-      setStatus('Datos cargados correctamente: ' + rows.length + ' productos. Se revisan los 14 alérgenos obligatorios.', 'ok');
-      render();
-    }catch(e){ setStatus('No se han podido cargar los datos desde Google Sheets. Detalle: ' + e.message, 'error'); }
-  };
+  async function fetchWithTimeout(url, ms){
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    try { return await fetch(url, {cache:'no-store', signal: controller.signal}); }
+    finally { clearTimeout(timer); }
+  }
 
-  function load(){
+  async function load(){
     setStatus('Cargando datos desde Google Sheets...'); rows = []; resultsEl.innerHTML = '';
-    const old = document.getElementById('gviz-loader'); if(old) old.remove();
-    const script = document.createElement('script'); script.id = 'gviz-loader';
-    script.onerror = () => setStatus('No se han podido cargar los datos. Google ha bloqueado o no ha devuelto el script GViz.', 'error');
-    script.src = 'https://docs.google.com/spreadsheets/d/e/' + encodeURIComponent(SHEET_ID) + '/gviz/tq?gid=' + encodeURIComponent(GID) + '&headers=1&tqx=responseHandler:__casaKikiCallback;out:json&cachebust=' + Date.now();
-    document.body.appendChild(script);
-    timeoutId = setTimeout(() => setStatus('No se han podido cargar los datos. La hoja no ha respondido. Comprueba que esté publicada en la web.', 'error'), 12000);
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/' + encodeURIComponent(PUBLISHED_SHEET_ID) + '/pub?gid=' + encodeURIComponent(GID) + '&single=true&output=csv&cachebust=' + Date.now();
+    try{
+      const res = await fetchWithTimeout(csvUrl, 15000);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      if(!text || text.includes('<!DOCTYPE html') || text.includes('<html')) throw new Error('Google ha devuelto HTML en vez de CSV. La hoja probablemente no está publicada como CSV.');
+      rows = tableToObjects(parseCSV(text));
+      if(!rows.length) throw new Error('CSV vacío o sin filas de productos.');
+      setStatus('Datos cargados correctamente: ' + rows.length + ' productos. Se revisan los 14 alérgenos obligatorios, incluidas trazas.', 'ok');
+      render();
+    }catch(e){
+      setStatus('No se han podido cargar los datos. Revisa que la hoja esté publicada en la web como CSV. Detalle: ' + e.message, 'error');
+    }
   }
 
   function render(){
@@ -160,7 +197,7 @@
       const name = getProductName(r) || 'Producto sin nombre';
       const famKey = findAnyKey(r,['Familia','Tipo','Categoría','Categoria','Grupo']);
       const obsKey = findAnyKey(r,['Observaciones','Observación','Observacion','Notas','Comentario','Comentarios']);
-      const fam = clean(r[famKey]); const obs = clean(r[obsKey]); const contText = getContainedText(r);
+      const fam = famKey ? clean(r[famKey]) : ''; const obs = obsKey ? clean(r[obsKey]) : ''; const contText = getContainedText(r);
       const c = classifyRow(r);
       const table = '<table><thead><tr><th>Alérgeno</th><th>Estado</th><th>Dato origen</th></tr></thead><tbody>' +
         c.detail.map(d => '<tr><td>'+escapeHtml(d.alergeno)+'</td><td class="'+estadoClass(d.estado)+'">'+estadoText(d.estado)+'</td><td>'+escapeHtml(d.valor || '')+'</td></tr>').join('') + '</tbody></table>';
